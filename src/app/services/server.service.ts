@@ -11,11 +11,11 @@ import {Status} from '../enum/status.enum';
 })
 export class ServerService {
 
-  private readonly apiUrl = ""
+  private readonly apiUrl = "http://localhost:8080"
 
   constructor(private httpClient: HttpClient) {}
 
-  servers$ = () => <Observable<CustomResponse>>
+  servers$ = <Observable<CustomResponse>>
   this.httpClient.get<CustomResponse>(`${this.apiUrl}/server/list`)
   .pipe(
     tap(console.log),
@@ -29,7 +29,7 @@ export class ServerService {
     catchError(this.handleError),
   );
 
-  ping$ = (ipAddress: number) => <Observable<CustomResponse>>
+  ping$ = (ipAddress: string) => <Observable<CustomResponse>>
   this.httpClient.get<CustomResponse>(`${this.apiUrl}/server/ping/${ipAddress}`)
   .pipe(
     tap(console.log),
