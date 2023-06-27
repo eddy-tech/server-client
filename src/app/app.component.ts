@@ -12,12 +12,13 @@ import {Status} from './enum/status.enum';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
-  appState$?: Observable<AppState<CustomResponse>>;
+  appState$?: Observable<AppState<CustomResponse | null>>;
   readonly DataState = DataState;
   readonly Status = Status;
   private filterSubject = new BehaviorSubject<string>('');
-  private dataSubject = new BehaviorSubject<CustomResponse | undefined>(undefined);
+  private dataSubject = new BehaviorSubject<CustomResponse| null>(null);
   filterStatus$ = this.filterSubject.asObservable();
+  selectedStatus: Status = Status.ALL;
 
   constructor(private serverService: ServerService) {}
 
@@ -60,6 +61,34 @@ export class AppComponent implements OnInit {
     )
   }
 
+  filterServers (status: Status): void {
+    this.selectedStatus = status;
+    if(this.dataSubject.value !== null){
+      this.appState$ = this.serverService.filter$(status, this.dataSubject.value)
+      .pipe(
+        map(response => {
+          return { dataState: DataState.LOADED_STATE, appData: response }
+        }),
+        startWith({ dataState: DataState.LOADED_STATE, appData: this.dataSubject.value }),
+        catchError((error: string) => {
+          return of({ dataState: DataState.ERROR_STATE, error });
+        })
+      )
+    }
+  }
 
-
+  deleteServer(serverId: number): void {
+    if(this.dataSubject.value !== null) {
+      this.appState$ = this.serverService.delete$(serverId)
+      .pipe(
+        map(response => {
+          return { dataState: DataState.LOADED_STATE, appData: response }
+        }),
+        startWith({ dataState: DataState.LOADING_STATE, appData: this.dataSubject.value }),
+        catchError((error: string) => {
+          return of({ dataState: DataState.ERROR_STATE, error })
+        })
+      )
+    }
+  }
 }
