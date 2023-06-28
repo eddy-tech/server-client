@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
 import {ServerService} from './services/server.service';
 import {AppState} from './interfaces/app-state';
 import {CustomResponse} from './interfaces/custom-response';
@@ -7,11 +7,13 @@ import {DataState} from './enum/data-state.enum';
 import {Status} from './enum/status.enum';
 import { NgForm } from '@angular/forms';
 import {Server} from './interfaces/server';
+import {NotificationService} from './services/notification.service';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
+  styleUrls: ['./app.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AppComponent implements OnInit {
   appState$?: Observable<AppState<CustomResponse | null>>;
@@ -25,12 +27,13 @@ export class AppComponent implements OnInit {
   isLoading$ = this.isLoading.asObservable();
 
 
-  constructor(private serverService: ServerService) {}
+  constructor(private serverService: ServerService, private notifier: NotificationService) {}
 
   ngOnInit(): void {
     this.appState$ =  this.serverService.servers$
     .pipe(
       map(response => {
+        this.notifier.onDefault(response.message);
         this.dataSubject.next(response)
         return { dataState: DataState.LOADED_STATE, appData: {
           ...response,
@@ -41,6 +44,7 @@ export class AppComponent implements OnInit {
       }),
       startWith({ dataState: DataState.LOADING_STATE }),
       catchError((error: string) => {
+        this.notifier.onError(error);
         return of({ dataState: DataState.ERROR_STATE, error});
       })
     )
@@ -53,6 +57,7 @@ export class AppComponent implements OnInit {
     this.appState$ = this.serverService.ping$(ipAddress)
     .pipe(
       map(response => {
+        this.notifier.onDefault(response.message);
         const dataSubjectValue = this.dataSubject.value;
         if(dataSubjectValue && dataSubjectValue.data && dataSubjectValue.data.servers && response.data.server){
           const index = dataSubjectValue.data.servers.findIndex(server => server.id === response.data.server?.id);
@@ -66,6 +71,7 @@ export class AppComponent implements OnInit {
       startWith({ dataState: DataState.LOADING_STATE, appData: this.dataSubject.value }),
       catchError((error : string) => {
         this.filterSubject.next('');
+        this.notifier.onError(error);
         return of({ dataState: DataState.ERROR_STATE, error });
       })
     )
@@ -77,10 +83,12 @@ export class AppComponent implements OnInit {
       this.appState$ = this.serverService.filter$(status, this.dataSubject.value)
       .pipe(
         map(response => {
+          this.notifier.onDefault(response.message);
           return { dataState: DataState.LOADED_STATE, appData: response }
         }),
         startWith({ dataState: DataState.LOADED_STATE, appData: this.dataSubject.value }),
         catchError((error: string) => {
+          this.notifier.onError(error);
           return of({ dataState: DataState.ERROR_STATE, error });
         })
       )
@@ -92,6 +100,7 @@ export class AppComponent implements OnInit {
     this.appState$ = this.serverService.save$(serverForm.value as Server)
     .pipe(
       map(response => {
+        this.notifier.onSuccess(response.message);
         this.dataSubject.next({
             ...response,
             data: {
@@ -110,15 +119,17 @@ export class AppComponent implements OnInit {
       startWith({ dataState: DataState.LOADED_STATE, appData: this.dataSubject.value }),
       catchError((error : string) => {
         this.isLoading.next(false);
+        this.notifier.onError(error);
         return of({ dataState: DataState.ERROR_STATE, error });
       })
     );
   }
 
   deleteServer(server: Server): void {
-      this.appState$ = this.serverService.delete$(server.id)
+    this.appState$ = this.serverService.delete$(server.id)
       .pipe(
         map(response => {
+          this.notifier.onSuccess(response.message);
           this.dataSubject.next({
             ...response,
             data: {
@@ -130,8 +141,23 @@ export class AppComponent implements OnInit {
         }),
         startWith({ dataState: DataState.LOADING_STATE, appData: this.dataSubject.value }),
         catchError((error: string) => {
+          this.notifier.onError(error);
           return of({ dataState: DataState.ERROR_STATE, error })
         })
       )
+  }
+
+  printReport(): void {
+    // window.print();
+    this.notifier.onInfo("Report downloaded successfully");
+    let dataType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+    let tableSelect = document.getElementById('servers');
+    let tableHtml = tableSelect?.outerHTML.replace(/ /g, '%20');
+    let downloadLink = document.createElement('a');
+    document.body.appendChild(downloadLink);
+    downloadLink.href = 'data:' + dataType + ', ' + tableHtml;
+    downloadLink.download = 'server-report.xls';
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
   }
 }
