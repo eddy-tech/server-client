@@ -8,7 +8,7 @@ export interface CustomResponse {
   message: string;
   developerMessage: string;
   data: {
-    servers?: Server[],
+    servers: Server[],
     server?: Server
   }
 }

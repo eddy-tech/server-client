@@ -5,6 +5,8 @@ import {CustomResponse} from './interfaces/custom-response';
 import {BehaviorSubject, Observable, catchError, map, of, startWith} from 'rxjs';
 import {DataState} from './enum/data-state.enum';
 import {Status} from './enum/status.enum';
+import { NgForm } from '@angular/forms';
+import {Server} from './interfaces/server';
 
 @Component({
   selector: 'app-root',
@@ -19,6 +21,9 @@ export class AppComponent implements OnInit {
   private dataSubject = new BehaviorSubject<CustomResponse| null>(null);
   filterStatus$ = this.filterSubject.asObservable();
   selectedStatus: Status = Status.ALL;
+  private isLoading = new BehaviorSubject<Boolean>(false);
+  isLoading$ = this.isLoading.asObservable();
+
 
   constructor(private serverService: ServerService) {}
 
@@ -27,7 +32,12 @@ export class AppComponent implements OnInit {
     .pipe(
       map(response => {
         this.dataSubject.next(response)
-        return { dataState: DataState.LOADED_STATE, appData: response};
+        return { dataState: DataState.LOADED_STATE, appData: {
+          ...response,
+          data: {
+            servers: response.data.servers.reverse()
+          }
+        }};
       }),
       startWith({ dataState: DataState.LOADING_STATE }),
       catchError((error: string) => {
@@ -77,11 +87,45 @@ export class AppComponent implements OnInit {
     }
   }
 
-  deleteServer(serverId: number): void {
-    if(this.dataSubject.value !== null) {
-      this.appState$ = this.serverService.delete$(serverId)
+  saveSever(serverForm: NgForm ): void {
+    this.isLoading.next(true);
+    this.appState$ = this.serverService.save$(serverForm.value as Server)
+    .pipe(
+      map(response => {
+        this.dataSubject.next({
+            ...response,
+            data: {
+              servers: [
+                // response.data.server,
+                ...(this.dataSubject.value?.data.servers ?? [])
+              ]
+            }
+          }
+        );
+        document.getElementById('closeModal')?.click();
+        this.isLoading.next(false);
+        serverForm.resetForm({ status: Status.SERVER_DOWN });
+        return { dataState: DataState.LOADED_STATE, appData: this.dataSubject.value };
+      }),
+      startWith({ dataState: DataState.LOADED_STATE, appData: this.dataSubject.value }),
+      catchError((error : string) => {
+        this.isLoading.next(false);
+        return of({ dataState: DataState.ERROR_STATE, error });
+      })
+    );
+  }
+
+  deleteServer(server: Server): void {
+      this.appState$ = this.serverService.delete$(server.id)
       .pipe(
         map(response => {
+          this.dataSubject.next({
+            ...response,
+            data: {
+              // ?? opérateur de coalescence null pour fournir un tableau vide []
+              servers: (this.dataSubject.value?.data.servers ?? []).filter(s => s.id !== server.id)
+            }
+          })
           return { dataState: DataState.LOADED_STATE, appData: response }
         }),
         startWith({ dataState: DataState.LOADING_STATE, appData: this.dataSubject.value }),
@@ -89,6 +133,5 @@ export class AppComponent implements OnInit {
           return of({ dataState: DataState.ERROR_STATE, error })
         })
       )
-    }
   }
 }
